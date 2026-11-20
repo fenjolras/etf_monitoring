@@ -6,11 +6,8 @@ variations par période, mix équipondéré et podium des meilleures performance
 Tout tourne dans le cloud :
 
 ```
-EODHD (API)  ──►  GitHub Actions  ──►  BigQuery (projet etf-monitoring, dataset etf_data)  ──►  visualisation
+EODHD (API)  ──►  GitHub Actions  ──►  BigQuery (projet etf-monitoring, dataset etf_data)  ──►  site statique
 ```
-
-> La visualisation Streamlit (`app.py`, `pages/`, `sections/`) est en cours de remplacement par un site
-> statique HTML. Elle est conservée pour l'instant comme référence des calculs.
 
 ## Référentiel des actifs : `etfs.toml`
 
@@ -81,6 +78,5 @@ source venv/Scripts/activate
 pip install -r requirements-prod.txt
 ```
 
-- `requirements-prod.txt` : dépendances des imports (GitHub Actions).
-- `requirements.txt` : dépendances de l'ancienne application Streamlit.
-- `requirements-dev.txt` : environnement de développement complet.
+- `requirements-prod.txt` : dépendances des imports et de la génération du site (GitHub Actions).
+- `requirements-dev.txt` : environnement de développement complet (Jupyter, etc.).
