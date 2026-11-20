@@ -16,6 +16,9 @@
 bq_project = "etf-monitoring"
 bq_dataset = "etf_data"
 date_debut_defaut = "2000-01-01"
+# Plan gratuit EODHD : 20 appels par jour, 1 appel par actif. Chaque fréquence
+# (daily, weekly) doit rester sous ce plafond : le chargement échoue sinon.
+quota_appels_jour = 20
 
 # Parité utilisée pour convertir les actifs cotés en USD.
 [parite]

@@ -18,8 +18,9 @@ Un bloc `[[actifs]]` par ETF : ticker EODHD, table BigQuery, libellé, devise, c
 fréquence d'import et affichage. **Ajouter un ETF = ajouter un bloc dans ce fichier.**
 
 - `devise = "USD"` : l'actif est converti en EUR avec la parité EUR/USD (bloc `[parite]`).
-- `frequence` : le plan gratuit EODHD limite à 20 appels par jour, donc les actifs sont répartis
-  entre `daily` (mardi-samedi) et `weekly` (dimanche).
+- `frequence` : le plan gratuit EODHD limite à 20 appels par jour (1 appel par actif), donc les
+  actifs sont répartis entre `daily` (mardi-samedi, 20 appels) et `weekly` (dimanche, 3 appels).
+  Le chargement de la config échoue si une fréquence dépasse `quota_appels_jour`.
 
 ## Import des données : `imports/`
 
@@ -37,6 +38,8 @@ python imports/import_prices.py --frequence all --dry-run   # lit BigQuery sans 
 
 Le workflow `.github/workflows/imports.yml` lance ce script chaque matin à 5h UTC
 (daily du mardi au samedi, weekly le dimanche), ou à la main depuis l'onglet Actions.
+En lancement manuel, l'option « test à blanc » est cochée par défaut : aucun appel EODHD n'est fait.
+Un import manuel réel consomme le quota du jour, à éviter un jour où le cron a déjà tourné.
 
 ## Secrets
 

@@ -9,8 +9,12 @@ on:
       frequence:
         description: "Actifs à importer"
         type: choice
-        options: [daily, weekly, all]
+        options: [daily, weekly]  # jamais les deux ensemble : quota EODHD gratuit
         default: daily
+      dry_run:
+        description: "Test à blanc : lit BigQuery sans appeler EODHD (aucun quota consommé)"
+        type: boolean
+        default: true
 
 permissions:
   contents: read
@@ -54,7 +58,11 @@ jobs:
         env:
           EOD_API_KEY: ${{ secrets.EOD_API_KEY }}
           GOOGLE_APPLICATION_CREDENTIALS_JSON: ${{ secrets.GCP_CREDENTIALS_JSON }}
-        run: python imports/import_prices.py --frequence ${{ steps.freq.outputs.frequence }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          args="--frequence ${{ steps.freq.outputs.frequence }}"
+          if [ "$DRY_RUN" = "true" ]; then args="$args --dry-run"; fi
+          python imports/import_prices.py $args
 
       # GitHub désactive les crons d'un repo public après 60 jours sans activité.
       # Réactiver le workflow depuis lui-même remet ce compteur à zéro.

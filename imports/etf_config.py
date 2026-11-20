@@ -69,6 +69,15 @@ def charger_config(path: Path = CONFIG_PATH) -> Config:
             raise ValueError(f"{nom} en double dans {path.name} : {sorted(doublons)}")
 
     projet = data["projet"]
+    quota = projet["quota_appels_jour"]
+    for frequence in FREQUENCES:
+        n = sum(a.frequence == frequence for a in (parite, *actifs))
+        if n > quota:
+            raise ValueError(
+                f"{n} actifs en '{frequence}' pour un quota EODHD de {quota} appels/jour : "
+                "passer des actifs dans l'autre fréquence"
+            )
+
     return Config(
         bq_project=projet["bq_project"],
         bq_dataset=projet["bq_dataset"],
