@@ -4,7 +4,7 @@
 # Champs :
 #   id         code court, unique, utilisé dans les scripts et le site
 #   ticker     symbole au format EODHD (TICKER.PLACE)
-#   table      nom de la table BigQuery (dataset etf_data)
+#   table      ancienne table BigQuery par actif (sert uniquement à la migration)
 #   nom        libellé affiché
 #   devise     devise de cotation ; "USD" => converti en EUR via la parité EUR/USD
 #   categories regroupements d'affichage
@@ -15,6 +15,11 @@
 [projet]
 bq_project = "etf-monitoring"
 bq_dataset = "etf_data"
+# Modèle BigQuery : une table de cours pour tous les actifs, le référentiel
+# des actifs (copie de ce fichier) et une vue des cours convertis en euros.
+table_cours = "cours"
+table_actifs = "actifs"
+vue_cours_eur = "cours_eur"
 date_debut_defaut = "2000-01-01"
 # Plan gratuit EODHD : 20 appels par jour, 1 appel par actif. Chaque fréquence
 # (daily, weekly) doit rester sous ce plafond : le chargement échoue sinon.

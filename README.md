@@ -11,19 +11,44 @@ EODHD (API)  ──►  GitHub Actions  ──►  BigQuery (projet etf-monitori
 
 ## Référentiel des actifs : `etfs.toml`
 
-Un bloc `[[actifs]]` par ETF : ticker EODHD, table BigQuery, libellé, devise, catégories,
-fréquence d'import et affichage. **Ajouter un ETF = ajouter un bloc dans ce fichier.**
+Un bloc `[[actifs]]` par ETF : ticker EODHD, libellé, devise, catégories, fréquence d'import et
+affichage. **Ajouter un ETF = ajouter un bloc dans ce fichier.** Le champ `table` ne sert plus
+qu'à la migration vers la table unique.
 
 - `devise = "USD"` : l'actif est converti en EUR avec la parité EUR/USD (bloc `[parite]`).
 - `frequence` : le plan gratuit EODHD limite à 20 appels par jour (1 appel par actif), donc les
   actifs sont répartis entre `daily` (mardi-samedi, 20 appels) et `weekly` (dimanche, 3 appels).
   Le chargement de la config échoue si une fréquence dépasse `quota_appels_jour`.
 
+## Modèle BigQuery (dataset `etf_data`, région EU)
+
+| Objet | Type | Contenu |
+|---|---|---|
+| `cours` | table | `date`, `id_actif`, `close` (devise de cotation), `importe_le` ; une ligne par jour et par actif. Partitionnée par mois sur `date`, clusterisée par `id_actif` |
+| `actifs` | table | référentiel des actifs, copie de `etfs.toml` rafraîchie à chaque import |
+| `cours_eur` | vue | `date`, `id_actif`, `devise_origine`, `close_eur` : actifs USD divisés par la parité EUR/USD du même jour |
+| `_transit_cours` | table | lot de l'import en cours, expire seule au bout de 7 jours |
+
+```sql
+-- Exemple : dernier cours en euros de chaque actif
+SELECT a.nom, c.date, c.close_eur
+FROM `etf-monitoring.etf_data.cours_eur` AS c
+JOIN `etf-monitoring.etf_data.actifs` AS a USING (id_actif)
+QUALIFY ROW_NUMBER() OVER (PARTITION BY id_actif ORDER BY date DESC) = 1
+ORDER BY a.nom;
+```
+
+Les anciennes tables par actif (`eunl_xetra`, `dtla_l`…) sont conservées après la migration
+(`scripts/migrer_table_unique.py`), le temps de valider le nouveau modèle, mais ne sont plus alimentées.
+
 ## Import des données : `imports/`
 
-- `import_prices.py` : pour chaque actif, lit la dernière date en base, télécharge les cours suivants
-  depuis EODHD et les ajoute à la table. Un actif en erreur n'empêche pas les autres d'être traités,
-  mais le script se termine en erreur pour que le workflow passe en rouge.
+- `import_prices.py` : lit en une requête la dernière date de chaque actif, télécharge les cours
+  suivants depuis EODHD, les charge dans `_transit_cours` puis les insère dans `cours` avec un
+  `MERGE` : une ligne (date, actif) déjà présente n'est jamais dupliquée. Un actif en erreur
+  n'empêche pas les autres d'être importés, mais le script se termine en erreur pour que le
+  workflow passe en rouge.
+- `bq_modele.py` : création de `cours`, synchronisation de `actifs`, définition de la vue `cours_eur`.
 - `etf_config.py` : lecture et validation de `etfs.toml`.
 - `bq_utils_import.py` : connexion à BigQuery.
 
@@ -40,7 +65,7 @@ Un import manuel réel consomme le quota du jour, à éviter un jour où le cron
 
 ## Site statique : `site/` et `scripts/build_site.py`
 
-`build_site.py` lit tous les cours dans BigQuery, convertit en EUR les actifs cotés en USD,
+`build_site.py` lit les cours en euros dans la vue `cours_eur` (une seule requête),
 écrit `public/data/prices.json` et copie les pages de `site/` dans `public/`, qui n'est pas versionné.
 Les calculs (base 100, variations, podium) se font dans le navigateur : le site n'accède jamais à BigQuery.
 

@@ -28,9 +28,21 @@ class Config:
     parite: Actif
     actifs: tuple[Actif, ...]
     categories: dict[str, str] = field(default_factory=dict)
+    table_cours: str = "cours"
+    table_actifs: str = "actifs"
+    vue_cours_eur: str = "cours_eur"
+
+    def objet(self, nom: str) -> str:
+        """Identifiant complet projet.dataset.nom d'une table ou d'une vue."""
+        return f"{self.bq_project}.{self.bq_dataset}.{nom}"
 
     def table_id(self, actif: Actif) -> str:
-        return f"{self.bq_project}.{self.bq_dataset}.{actif.table}"
+        """Ancienne table par actif (migration uniquement)."""
+        return self.objet(actif.table)
+
+    @property
+    def tous(self) -> list[Actif]:
+        return [self.parite, *self.actifs]
 
     def a_importer(self, frequence: str = "all", ids: list[str] | None = None) -> list[Actif]:
         """Parité + actifs filtrés par fréquence ("daily", "weekly", "all") ou par id."""
@@ -86,6 +98,9 @@ def charger_config(path: Path = CONFIG_PATH) -> Config:
 
     return Config(
         categories=categories,
+        table_cours=projet["table_cours"],
+        table_actifs=projet["table_actifs"],
+        vue_cours_eur=projet["vue_cours_eur"],
         bq_project=projet["bq_project"],
         bq_dataset=projet["bq_dataset"],
         date_debut_defaut=projet["date_debut_defaut"],

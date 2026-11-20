@@ -1,7 +1,10 @@
-"""Import incrémental des cours de clôture EODHD vers BigQuery.
+"""Import incrémental des cours de clôture EODHD vers BigQuery (table `cours`).
 
-Pour chaque actif de etfs.toml : lit la dernière date en base, télécharge les
-cours postérieurs depuis EODHD et les ajoute à la table (append).
+1. Prépare le modèle : table `cours`, référentiel `actifs` (copie de etfs.toml), vue `cours_eur`.
+2. Lit en une requête la dernière date en base de chaque actif.
+3. Télécharge chez EODHD les cours postérieurs (1 appel par actif).
+4. Charge les nouvelles lignes dans une table de transit, puis les fusionne dans
+   `cours` avec un MERGE : une ligne (date, actif) déjà présente n'est jamais dupliquée.
 
 Exemples :
     python imports/import_prices.py --frequence daily
@@ -9,36 +12,36 @@ Exemples :
     python imports/import_prices.py --frequence all --dry-run
 
 Code de sortie 1 si au moins un actif a échoué (le workflow passe alors en rouge),
-les autres actifs étant tout de même traités.
+les autres actifs étant tout de même importés.
 """
 
 import argparse
 import os
 import sys
+from datetime import datetime, timedelta, timezone
 from io import StringIO
 
 import pandas as pd
 import requests
 from dotenv import load_dotenv
-from google.api_core.exceptions import NotFound
 from google.cloud import bigquery
 
+from bq_modele import preparer_modele
 from bq_utils_import import get_bigquery_client
 from etf_config import Actif, Config, charger_config
 
 EOD_URL = "https://eodhistoricaldata.com/api/eod/{ticker}"
-SCHEMA = [
-    bigquery.SchemaField("Date", "DATE"),
-    bigquery.SchemaField("Close", "FLOAT"),
+TABLE_TRANSIT = "_transit_cours"
+SCHEMA_TRANSIT = [
+    bigquery.SchemaField("date", "DATE", mode="REQUIRED"),
+    bigquery.SchemaField("id_actif", "STRING", mode="REQUIRED"),
+    bigquery.SchemaField("close", "FLOAT64", mode="REQUIRED"),
 ]
 
 
-def derniere_date(client: bigquery.Client, table_id: str) -> pd.Timestamp | None:
-    try:
-        row = next(iter(client.query(f"SELECT MAX(Date) AS d FROM `{table_id}`").result()))
-    except NotFound:
-        return None
-    return pd.Timestamp(row.d) if row.d else None
+def dernieres_dates(client: bigquery.Client, config: Config) -> dict[str, pd.Timestamp]:
+    sql = f"SELECT id_actif, MAX(date) AS d FROM `{config.objet(config.table_cours)}` GROUP BY id_actif"
+    return {r.id_actif: pd.Timestamp(r.d) for r in client.query(sql).result()}
 
 
 def telecharger(ticker: str, depuis: pd.Timestamp, api_key: str) -> pd.DataFrame:
@@ -57,6 +60,9 @@ def telecharger(ticker: str, depuis: pd.Timestamp, api_key: str) -> pd.DataFrame
         return pd.DataFrame(columns=["Date", "Close"])
 
     df = pd.read_csv(StringIO(texte))
+    # Sans cotation sur la période (jour férié, séance pas encore close), EODHD renvoie "Value" seul.
+    if df.empty:
+        return pd.DataFrame(columns=["Date", "Close"])
     if not {"Date", "Close"} <= set(df.columns):
         raise RuntimeError(f"Colonnes inattendues dans la réponse EODHD : {list(df.columns)}")
 
@@ -68,32 +74,41 @@ def telecharger(ticker: str, depuis: pd.Timestamp, api_key: str) -> pd.DataFrame
     return df.dropna().sort_values("Date")
 
 
-def importer(actif: Actif, config: Config, client: bigquery.Client, api_key: str, dry_run: bool) -> int:
-    """Importe un actif ; renvoie le nombre de lignes ajoutées."""
-    table_id = config.table_id(actif)
-    fin = derniere_date(client, table_id)
+def nouvelles_lignes(actif: Actif, fin: pd.Timestamp | None, config: Config, api_key: str) -> pd.DataFrame:
     depuis = fin + pd.Timedelta(days=1) if fin is not None else pd.Timestamp(config.date_debut_defaut)
-    print(f"[{actif.id}] dernière date en base : {fin.date() if fin is not None else 'aucune'}"
-          f" -> import depuis le {depuis.date()}")
-
-    if dry_run:
-        return 0
-
     df = telecharger(actif.ticker, depuis, api_key)
-    # Protection contre les doublons si EODHD renvoie des dates déjà en base.
     if fin is not None:
         df = df[df["Date"] > fin]
     if df.empty:
         print(f"[{actif.id}] aucune nouvelle donnée")
-        return 0
+        return pd.DataFrame(columns=["date", "id_actif", "close"])
+    print(f"[{actif.id}] {len(df)} ligne(s), jusqu'au {df['Date'].max().date()}")
+    return pd.DataFrame({"date": df["Date"].dt.date, "id_actif": actif.id, "close": df["Close"]})
 
+
+def fusionner(client: bigquery.Client, config: Config, df: pd.DataFrame) -> int:
+    """Charge `df` en transit puis l'insère dans `cours` sans créer de doublon."""
+    transit = config.objet(TABLE_TRANSIT)
     job_config = bigquery.LoadJobConfig(
-        write_disposition=bigquery.WriteDisposition.WRITE_APPEND,
-        schema=SCHEMA,
+        schema=SCHEMA_TRANSIT,
+        write_disposition=bigquery.WriteDisposition.WRITE_TRUNCATE,
     )
-    client.load_table_from_dataframe(df, table_id, job_config=job_config).result()
-    print(f"[{actif.id}] {len(df)} ligne(s) ajoutée(s), jusqu'au {df['Date'].max().date()}")
-    return len(df)
+    client.load_table_from_dataframe(df, transit, job_config=job_config).result()
+    # La table de transit disparaît d'elle-même si plus aucun import ne tourne.
+    table = client.get_table(transit)
+    table.expires = datetime.now(timezone.utc) + timedelta(days=7)
+    client.update_table(table, ["expires"])
+
+    job = client.query(f"""
+        MERGE `{config.objet(config.table_cours)}` AS c
+        USING `{transit}` AS t
+        ON c.date = t.date AND c.id_actif = t.id_actif
+        WHEN NOT MATCHED THEN
+          INSERT (date, id_actif, close, importe_le)
+          VALUES (t.date, t.id_actif, t.close, CURRENT_TIMESTAMP())
+    """)
+    job.result()
+    return job.num_dml_affected_rows or 0
 
 
 def main() -> int:
@@ -115,14 +130,27 @@ def main() -> int:
     print(f"{len(actifs)} actif(s) à traiter : {', '.join(a.id for a in actifs)}")
 
     client = get_bigquery_client()
-    echecs = []
+    if not args.dry_run:
+        preparer_modele(client, config)
+    fins = dernieres_dates(client, config)
+
+    lots, echecs = [], []
     for actif in actifs:
+        fin = fins.get(actif.id)
+        print(f"[{actif.id}] dernière date en base : {fin.date() if fin is not None else 'aucune'}")
+        if args.dry_run:
+            continue
         try:
-            importer(actif, config, client, api_key, args.dry_run)
+            lots.append(nouvelles_lignes(actif, fin, config, api_key))
         except Exception as e:  # on continue avec les actifs suivants
-            message = str(e).replace(api_key, "***") if api_key else str(e)  # les erreurs réseau citent l'URL
+            message = str(e).replace(api_key, "***")  # les erreurs réseau citent l'URL
             print(f"[{actif.id}] ÉCHEC : {message}", file=sys.stderr)
             echecs.append(actif.id)
+
+    nouveaux = pd.concat([l for l in lots if not l.empty], ignore_index=True) if any(not l.empty for l in lots) else None
+    if nouveaux is not None:
+        inseres = fusionner(client, config, nouveaux)
+        print(f"{inseres} ligne(s) ajoutée(s) dans `{config.table_cours}`")
 
     if echecs:
         print(f"{len(echecs)} échec(s) : {', '.join(echecs)}", file=sys.stderr)

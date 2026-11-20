@@ -1,8 +1,7 @@
 """Construit le site statique dans public/.
 
-1. Lit tous les cours dans BigQuery (une seule requête).
-2. Convertit en EUR les actifs cotés en USD, avec la parité EUR/USD du même jour.
-3. Écrit public/data/prices.json et copie les fichiers de site/.
+1. Lit les cours en euros dans la vue BigQuery `cours_eur` (une seule requête).
+2. Écrit public/data/prices.json et copie les fichiers de site/.
 
     python scripts/build_site.py
     python -m http.server 8000 -d public     # prévisualisation locale
@@ -16,6 +15,7 @@ from pathlib import Path
 
 import pandas as pd
 from dotenv import load_dotenv
+from google.cloud import bigquery
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "imports"))
@@ -27,34 +27,29 @@ SOURCE = ROOT / "site"
 PUBLIC = ROOT / "public"
 
 
-def lire_cours(config: Config, actifs: list[Actif]) -> pd.DataFrame:
-    """Tous les cours au format long : id, Date, Close."""
-    sql = "\nUNION ALL\n".join(
-        f"SELECT '{a.id}' AS id, Date, Close FROM `{config.table_id(a)}`" for a in actifs
+def lire_cours_eur(config: Config, actifs: list[Actif]) -> pd.DataFrame:
+    """Cours en euros (vue `cours_eur`, conversion faite par BigQuery) : id, Date, Close."""
+    sql = f"""
+        SELECT id_actif AS id, date AS Date, close_eur AS Close
+        FROM `{config.objet(config.vue_cours_eur)}`
+        WHERE id_actif IN UNNEST(@ids)
+    """
+    job_config = bigquery.QueryJobConfig(
+        query_parameters=[bigquery.ArrayQueryParameter("ids", "STRING", [a.id for a in actifs])]
     )
-    client = get_bigquery_client()
-    rows = client.query(sql).result()
+    rows = get_bigquery_client().query(sql, job_config=job_config).result()
     df = pd.DataFrame([dict(r) for r in rows], columns=["id", "Date", "Close"])
     df["Date"] = pd.to_datetime(df["Date"])
     return df.dropna().sort_values(["id", "Date"])
 
 
-def serie_eur(df: pd.DataFrame, actif: Actif, fx: pd.Series) -> pd.Series:
-    s = df.loc[df["id"] == actif.id].set_index("Date")["Close"]
-    if actif.devise == "USD":
-        # EURUSD = dollars pour 1 euro : prix en EUR = prix en USD / EURUSD (dates communes uniquement).
-        s = (s / fx.reindex(s.index)).dropna()
-    return s
-
-
 def construire_donnees(config: Config) -> dict:
     a_exporter = [config.parite, *(a for a in config.actifs if a.affiche)]
-    df = lire_cours(config, [config.parite, *config.actifs])
-    fx = df.loc[df["id"] == config.parite.id].set_index("Date")["Close"]
+    df = lire_cours_eur(config, a_exporter)
 
     actifs, series = [], {}
     for actif in a_exporter:
-        s = serie_eur(df, actif, fx)
+        s = df.loc[df["id"] == actif.id].set_index("Date")["Close"]
         if s.empty:
             print(f"[{actif.id}] aucune donnée, ignoré", file=sys.stderr)
             continue
