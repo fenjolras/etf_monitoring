@@ -1,0 +1,34 @@
+# Environnement virtuel
+venv/
+
+# Données
+*.csv
+data/
+notebook/
+imports/SQLite/
+
+
+# Cache et fichiers compilés
+__pycache__/
+*.pyc
+
+# PyCharm
+.idea/
+
+# Authentification
+.secrets/
+
+# notes diverses
+note
+
+# authentification big query copié en local (existe de manière autonome dans streamlit cloud)
+.streamlit/secrets.toml
+
+# EOD_API_KEY
+imports/.env
+
+# Secrets locaux, quel que soit le dossier
+.env
+.env.*
+.secrets/
+*service-account*.json

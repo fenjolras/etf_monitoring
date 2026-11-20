@@ -1,0 +1,9 @@
+# Pour Streamlit Cloud
+streamlit==1.44.1
+pandas==2.2.3
+google-auth==2.39.0
+google-auth-oauthlib==1.2.2
+google-cloud-bigquery==3.31.0
+python-dateutil==2.9.0.post0
+db-dtypes==1.4.2
+plotly
