@@ -95,6 +95,19 @@ Aucun secret dans le dépôt.
 | `.env` local (ignoré par git) | `EOD_API_KEY` | clé API EODHD |
 | `.env` local (ignoré par git) | `GOOGLE_APPLICATION_CREDENTIALS` | chemin vers le fichier JSON de la clé, rangé hors du dépôt |
 
+## Maîtrise des coûts BigQuery
+
+Objectif : rester dans le palier gratuit (consommation constatée : environ 3 Go de requêtes par mois).
+
+| Garde-fou | Où | Effet |
+|---|---|---|
+| Plafond par requête : 1 Gio | `imports/bq_utils_import.py` (`MAX_OCTETS_FACTURES`) | une requête qui facturerait plus échoue (`bytesBilledLimitExceeded`) |
+| Quota « Query usage per day » | console GCP, IAM et administration > Quotas | bloque les requêtes du projet au-delà du plafond journalier |
+| Budget de 1 € avec alertes à 50, 90 et 100 % | console GCP, Facturation > Budgets et alertes | e-mail d'alerte, sans blocage |
+
+Les chargements de données (load jobs) sont gratuits. BigQuery facture au minimum 10 Mo par table
+lue dans une requête, c'est donc le montant habituel de nos requêtes.
+
 ## Environnement local (Windows)
 
 ```bash
