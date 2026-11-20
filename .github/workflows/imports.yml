@@ -1,0 +1,65 @@
+name: Import des cours ETF
+
+on:
+  schedule:
+    - cron: "0 5 * * 2-6"  # daily : mardi-samedi 5h UTC (cours de clôture de la veille)
+    - cron: "0 5 * * 0"    # weekly : dimanche 5h UTC
+  workflow_dispatch:
+    inputs:
+      frequence:
+        description: "Actifs à importer"
+        type: choice
+        options: [daily, weekly, all]
+        default: daily
+
+permissions:
+  contents: read
+  actions: write  # nécessaire pour l'étape "keepalive" ci-dessous
+
+concurrency:
+  group: imports
+  cancel-in-progress: false
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements-prod.txt
+
+      - name: Installer les dépendances
+        run: pip install -r requirements-prod.txt
+
+      - name: Choisir la fréquence
+        id: freq
+        env:
+          EVENT: ${{ github.event_name }}
+          SCHEDULE: ${{ github.event.schedule }}
+          INPUT: ${{ inputs.frequence }}
+        run: |
+          if [ "$EVENT" = "workflow_dispatch" ]; then f="$INPUT"
+          elif [ "$SCHEDULE" = "0 5 * * 0" ]; then f="weekly"
+          else f="daily"; fi
+          echo "frequence=$f" >> "$GITHUB_OUTPUT"
+          echo "Fréquence : $f"
+
+      - name: Importer les cours
+        env:
+          EOD_API_KEY: ${{ secrets.EOD_API_KEY }}
+          GOOGLE_APPLICATION_CREDENTIALS_JSON: ${{ secrets.GCP_CREDENTIALS_JSON }}
+        run: python imports/import_prices.py --frequence ${{ steps.freq.outputs.frequence }}
+
+      # GitHub désactive les crons d'un repo public après 60 jours sans activité.
+      # Réactiver le workflow depuis lui-même remet ce compteur à zéro.
+      - name: Keepalive
+        if: always() && github.event_name == 'schedule'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow enable imports.yml --repo "$GITHUB_REPOSITORY"

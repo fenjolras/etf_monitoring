@@ -1,8 +1,7 @@
-# Pour GitHub Actions
+# Pour GitHub Actions (scripts d'import)
 pandas==2.2.3
 requests==2.32.3
 python-dotenv==1.1.0
 google-cloud-bigquery==3.31.0
 google-auth==2.39.0
-google-auth-oauthlib==1.2.2
-pyarrow
+pyarrow==26.0.1

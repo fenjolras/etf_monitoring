@@ -1,0 +1,260 @@
+# Référentiel unique des actifs suivis.
+# Ajouter un actif = ajouter un bloc [[actifs]] ici, rien d'autre.
+#
+# Champs :
+#   id         code court, unique, utilisé dans les scripts et le site
+#   ticker     symbole au format EODHD (TICKER.PLACE)
+#   table      nom de la table BigQuery (dataset etf_data)
+#   nom        libellé affiché
+#   devise     devise de cotation ; "USD" => converti en EUR via la parité EUR/USD
+#   categories regroupements d'affichage
+#   frequence  "daily" (mardi-samedi) ou "weekly" (dimanche) : le plan gratuit
+#              EODHD limite à 20 appels API par jour
+#   affiche    false = importé mais pas encore présenté sur le site
+
+[projet]
+bq_project = "etf-monitoring"
+bq_dataset = "etf_data"
+date_debut_defaut = "2000-01-01"
+
+# Parité utilisée pour convertir les actifs cotés en USD.
+[parite]
+id = "EURUSD"
+ticker = "EURUSD.FOREX"
+table = "eur_usd_parity"
+nom = "Parité EUR/USD"
+frequence = "daily"
+
+# --- Portefeuille Harry Browne -------------------------------------------
+
+[[actifs]]
+id = "DTLA"
+ticker = "DTLA.LSE"
+table = "dtla_l"
+nom = "USD T-Bond 20 yrs"
+devise = "USD"
+categories = ["harry_browne", "obligations"]
+frequence = "daily"
+affiche = true
+
+[[actifs]]
+id = "ZPR1"
+ticker = "ZPR1.XETRA"
+table = "zpr1_xetra"
+nom = "USD T-Bill 1-3 Month"
+devise = "EUR"
+categories = ["harry_browne", "obligations"]
+frequence = "daily"
+affiche = true
+
+[[actifs]]
+id = "SXR8"
+ticker = "SXR8.XETRA"
+table = "sxr8_xetra"
+nom = "S&P 500"
+devise = "EUR"
+categories = ["harry_browne", "us"]
+frequence = "daily"
+affiche = true
+
+[[actifs]]
+id = "XGDU"
+ticker = "XGDU.XETRA"
+table = "xgdu_xetra"
+nom = "Physical Gold"
+devise = "EUR"
+categories = ["harry_browne", "hard_assets"]
+frequence = "daily"
+affiche = true
+
+# --- Monde ----------------------------------------------------------------
+
+[[actifs]]
+id = "EUNL"
+ticker = "EUNL.XETRA"
+table = "eunl_xetra"
+nom = "MSCI World Large cap"
+devise = "EUR"
+categories = ["world"]
+frequence = "daily"
+affiche = true
+
+[[actifs]]
+id = "IS3N"
+ticker = "IS3N.XETRA"
+table = "is3n_xetra"
+nom = "MSCI World Emerging markets"
+devise = "EUR"
+categories = ["world"]
+frequence = "daily"
+affiche = true
+
+[[actifs]]
+id = "XDWT"
+ticker = "XDWT.XETRA"
+table = "xdwt_xetra"
+nom = "MSCI World IT"
+devise = "EUR"
+categories = ["world", "secteurs"]
+frequence = "daily"
+affiche = true
+
+[[actifs]]
+id = "XDWH"
+ticker = "XDWH.XETRA"
+table = "xdwh_xetra"
+nom = "MSCI World Health Care"
+devise = "EUR"
+categories = ["world", "secteurs"]
+frequence = "daily"
+affiche = true
+
+[[actifs]]
+id = "XDWI"
+ticker = "XDWI.XETRA"
+table = "xdwi_xetra"
+nom = "MSCI World Industrials"
+devise = "USD"
+categories = ["world", "secteurs"]
+frequence = "daily"
+affiche = true
+
+# --- États-Unis -----------------------------------------------------------
+
+[[actifs]]
+id = "RTWO"
+ticker = "RTWO.AS"
+table = "rtwo_as"
+nom = "Russel 2000 US"
+devise = "EUR"
+categories = ["us"]
+frequence = "daily"
+affiche = true
+
+[[actifs]]
+id = "XDEW"
+ticker = "XDEW.XETRA"
+table = "xdew_xetra"
+nom = "S&P 500 Equal weight"
+devise = "EUR"
+categories = ["us"]
+frequence = "daily"
+affiche = false
+
+[[actifs]]
+id = "XD9U"
+ticker = "XD9U.XETRA"
+table = "xd9u_xetra"
+nom = "MSCI USA"
+devise = "EUR"
+categories = ["us"]
+frequence = "weekly"
+affiche = false
+
+[[actifs]]
+id = "R1VL"
+ticker = "R1VL.LSE"
+table = "r1vl_lse"
+nom = "Largest 1000 US cap"
+devise = "USD"
+categories = ["us"]
+frequence = "weekly"
+affiche = false
+
+# --- Europe ---------------------------------------------------------------
+
+[[actifs]]
+id = "EUNK"
+ticker = "EUNK.XETRA"
+table = "eunk_xetra"
+nom = "MSCI Europe Large cap"
+devise = "EUR"
+categories = ["europe"]
+frequence = "daily"
+affiche = true
+
+[[actifs]]
+id = "XXSC"
+ticker = "XXSC.XETRA"
+table = "xxsc_xetra"
+nom = "MSCI Europe Small Cap"
+devise = "EUR"
+categories = ["europe"]
+frequence = "daily"
+affiche = true
+
+# --- Asie -----------------------------------------------------------------
+
+[[actifs]]
+id = "ETLK"
+ticker = "ETLK.XETRA"
+table = "etlk_xetra"
+nom = "MSCI Asia Large cap"
+devise = "EUR"
+categories = ["asie"]
+frequence = "daily"
+affiche = true
+
+[[actifs]]
+id = "CEBL"
+ticker = "CEBL.XETRA"
+table = "cebl_xetra"
+nom = "MSCI Asia Emerging markets"
+devise = "EUR"
+categories = ["asie"]
+frequence = "daily"
+affiche = true
+
+# --- Thématiques ----------------------------------------------------------
+
+[[actifs]]
+id = "NUKL"
+ticker = "NUKL.XETRA"
+table = "nukl_xetra"
+nom = "Nucléaire Monde"
+devise = "EUR"
+categories = ["secteurs"]
+frequence = "daily"
+affiche = false
+
+[[actifs]]
+id = "XDW0"
+ticker = "XDW0.XETRA"
+table = "xdw0_xetra"
+nom = "Énergies fossiles Monde"
+devise = "EUR"
+categories = ["secteurs"]
+frequence = "daily"
+affiche = false
+
+[[actifs]]
+id = "XMLD"
+ticker = "XMLD.XETRA"
+table = "xmld_xetra"
+nom = "Intelligence Artificielle"
+devise = "EUR"
+categories = ["secteurs"]
+frequence = "daily"
+affiche = false
+
+[[actifs]]
+id = "DELG"
+ticker = "DELG.XETRA"
+table = "delg_xetra"
+nom = "Énergies renouvelables Monde"
+devise = "EUR"
+categories = ["secteurs"]
+frequence = "weekly"
+affiche = false
+
+# --- Actifs réels ---------------------------------------------------------
+
+[[actifs]]
+id = "BITC"
+ticker = "BITC.XETRA"
+table = "bitc_xetra"
+nom = "Physical Bitcoin"
+devise = "EUR"
+categories = ["hard_assets"]
+frequence = "daily"
+affiche = true
