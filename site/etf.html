@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Fiche ETF – ETF Monitoring</title>
+  <link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="wrap">
+      <a class="brand" href="index.html">ETF Monitoring</a>
+      <nav class="nav" aria-label="Navigation principale">
+        <a href="index.html">Accueil</a>
+        <a href="comparateur.html">Comparateur</a>
+        <a href="comparateur.html?preset=harry_browne">Harry Browne</a>
+        <a href="etfs.html" aria-current="page">Tous les ETF</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="wrap" id="contenu">
+    <p class="muted">Chargement…</p>
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrap">
+      <p id="maj"></p>
+      <p>Les performances passées ne préjugent pas des performances futures. Ce site est informatif et ne constitue pas un conseil en investissement.</p>
+    </div>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/plotly.js-basic-dist-min@2.35.2/plotly-basic.min.js"></script>
+  <script src="assets/app.js"></script>
+  <script>
+    const PLAGES = [["1 an", { ans: 1 }], ["3 ans", { ans: 3 }], ["5 ans", { ans: 5 }], ["Max", null]];
+    const contenu = document.getElementById("contenu");
+    let plage = "Max";
+
+    function tracer(d, a) {
+      const s = d.series[a.id];
+      const p = PLAGES.find(([l]) => l === plage)[1];
+      const debut = p ? App.decaler(s.dates.at(-1), p) : s.dates[0];
+      const i0 = Math.max(0, App.indexAuPlusTard(s.dates, debut));
+      Plotly.react("graphique", [{
+        x: s.dates.slice(i0), y: s.close.slice(i0), type: "scatter", mode: "lines", name: a.nom,
+        line: { color: App.couleurSerie(0), width: 2 },
+        hovertemplate: a.est_parite ? "%{y:.4f}<extra></extra>" : "%{y:.2f} €<extra></extra>",
+      }], App.layout({ yaxis: { ticksuffix: a.est_parite ? "" : " €" } }), App.PLOTLY_CONFIG);
+    }
+
+    function afficher(d) {
+      const id = new URLSearchParams(location.search).get("id");
+      const a = App.actif(d, id);
+      if (!a) {
+        contenu.innerHTML = `<p class="notice">ETF inconnu. <a href="etfs.html">Voir la liste des ETF</a>.</p>`;
+        return;
+      }
+      const s = d.series[a.id];
+      document.title = `${a.nom} – ETF Monitoring`;
+      const tuiles = App.PERIODES.map(([l, p]) => {
+        const v = App.variation(s, p);
+        return `<div class="tile"><div class="label">${l}</div><div class="value ${App.sens(v)}">${App.pct(v)}</div></div>`;
+      }).join("");
+      const cats = a.categories.map((c) => d.categories[c]).join(" · ");
+      const conversion = a.devise_origine === "USD" ? " · coté en dollars, converti en euros" : "";
+
+      contenu.innerHTML = `
+        <h1>${App.echapper(a.nom)}</h1>
+        <p class="lead">${App.echapper(a.ticker)} · ${App.echapper(cats)}${conversion}<br>
+          Dernier cours : <strong>${App.prix(a, s.close.at(-1))}</strong> au ${App.date(s.dates.at(-1))}
+          ${a.est_parite ? "(dollars pour 1 euro)" : ""}</p>
+        <section class="card">
+          <div class="card-head">
+            <h2>Cours de clôture</h2>
+            <div class="seg" role="group" aria-label="Période affichée">
+              ${PLAGES.map(([l]) => `<button type="button" data-plage="${l}" aria-pressed="${l === plage}">${l}</button>`).join("")}
+            </div>
+          </div>
+          <div id="graphique" class="chart"></div>
+          <p class="muted small">Historique disponible depuis le ${App.date(s.dates[0])}.</p>
+        </section>
+        <section class="card">
+          <h2>Variations</h2>
+          <div class="tiles">${tuiles}</div>
+          <p class="muted small">« — » : historique insuffisant pour la période.</p>
+        </section>
+        ${a.est_parite ? "" : `<p><a href="comparateur.html?ids=${a.id},EUNL">Comparer cet ETF avec d'autres →</a></p>`}`;
+
+      contenu.querySelector(".seg").addEventListener("click", (e) => {
+        const b = e.target.closest("button");
+        if (!b) return;
+        plage = b.dataset.plage;
+        contenu.querySelectorAll(".seg button").forEach((x) => x.setAttribute("aria-pressed", x === b));
+        tracer(d, a);
+      });
+      tracer(d, a);
+      App.surChangementTheme(() => tracer(d, a));
+    }
+
+    App.charger()
+      .then((d) => { afficher(d); App.piedDePage(d); })
+      .catch((e) => App.erreur(contenu, e));
+  </script>
+</body>
+</html>

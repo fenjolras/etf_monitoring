@@ -41,6 +41,27 @@ Le workflow `.github/workflows/imports.yml` lance ce script chaque matin à 5h U
 En lancement manuel, l'option « test à blanc » est cochée par défaut : aucun appel EODHD n'est fait.
 Un import manuel réel consomme le quota du jour, à éviter un jour où le cron a déjà tourné.
 
+## Site statique : `site/` et `scripts/build_site.py`
+
+`build_site.py` lit tous les cours dans BigQuery, convertit en EUR les actifs cotés en USD,
+écrit `public/data/prices.json` et copie les pages de `site/` dans `public/`, qui n'est pas versionné.
+Les calculs (base 100, variations, podium) se font dans le navigateur : le site n'accède jamais à BigQuery.
+
+| Page | Contenu |
+|---|---|
+| `index.html` | podiums à 3 mois et à 1 an, avec le classement complet |
+| `comparateur.html` | jusqu'à 8 ETF en base 100, mix équipondéré, performance annualisée ; `?preset=harry_browne` |
+| `etfs.html` | tous les ETF par catégorie, avec leurs variations |
+| `etf.html?id=EUNL` | fiche d'un ETF : historique et variations |
+
+```bash
+python scripts/build_site.py
+python -m http.server 8000 -d public    # puis http://localhost:8000
+```
+
+Seuls les actifs `affiche = true` de `etfs.toml` sont publiés. La publication sur GitHub Pages n'est pas
+encore activée : elle attend la validation des conditions de rediffusion des données EODHD.
+
 ## Secrets
 
 Aucun secret dans le dépôt.

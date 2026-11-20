@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Comparateur d'ETF – ETF Monitoring</title>
+  <meta name="description" content="Comparez l'évolution de plusieurs ETF en base 100 depuis la date de votre choix, avec le mix équipondéré et la performance annualisée.">
+  <link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="wrap">
+      <a class="brand" href="index.html">ETF Monitoring</a>
+      <nav class="nav" aria-label="Navigation principale">
+        <a href="index.html">Accueil</a>
+        <a href="comparateur.html" id="nav-comparateur">Comparateur</a>
+        <a href="comparateur.html?preset=harry_browne" id="nav-hb">Harry Browne</a>
+        <a href="etfs.html">Tous les ETF</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <h1 id="titre">Comparateur d'ETF</h1>
+    <p class="lead" id="intro">
+      Choisissez jusqu'à 8 ETF et une date de départ : chaque cours est ramené à 100 à cette date.
+      La courbe en pointillés est le mix équipondéré : un portefeuille investi à parts égales à la date de
+      départ, sans rééquilibrage ensuite.
+    </p>
+
+    <section class="card">
+      <h2>ETF comparés</h2>
+      <div id="choix"><p class="muted">Chargement…</p></div>
+    </section>
+
+    <section class="card">
+      <div class="controls">
+        <div class="seg" role="group" aria-label="Date de départ rapide" id="raccourcis">
+          <button type="button" data-plage="1 an">1 an</button>
+          <button type="button" data-plage="3 ans">3 ans</button>
+          <button type="button" data-plage="5 ans">5 ans</button>
+          <button type="button" data-plage="Max">Max</button>
+        </div>
+        <label>Base 100 au <input type="date" id="depuis"></label>
+      </div>
+      <div id="message"></div>
+      <div id="graphique" class="chart"></div>
+    </section>
+
+    <section class="card" id="bloc-tableau">
+      <h2 id="titre-tableau">Performances</h2>
+      <div class="table-wrap" id="tableau"></div>
+      <p class="muted small">La performance annualisée n'est affichée qu'à partir d'un an de recul.</p>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrap">
+      <p id="maj"></p>
+      <p>Les performances passées ne préjugent pas des performances futures. Ce site est informatif et ne constitue pas un conseil en investissement.</p>
+    </div>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/plotly.js-basic-dist-min@2.35.2/plotly-basic.min.js"></script>
+  <script src="assets/app.js"></script>
+  <script>
+    const MAX = App.NB_COULEURS;
+    const PAR_DEFAUT = ["EUNL", "XGDU", "BITC"];
+    const PLAGES = { "1 an": { ans: 1 }, "3 ans": { ans: 3 }, "5 ans": { ans: 5 }, Max: null };
+    const PRESETS = {
+      harry_browne: {
+        titre: "Portefeuille Harry Browne",
+        intro: "Imaginé par Harry Browne, ce portefeuille répartit le capital à parts égales entre actions, " +
+          "obligations d'État longues, monétaire et or, pour résister à la croissance, à l'inflation, à la " +
+          "déflation comme à la récession. La courbe en pointillés représente le portefeuille investi à 25 % " +
+          "dans chaque ETF à la date de départ, sans rééquilibrage ensuite.",
+      },
+    };
+
+    let d;
+    let choix = [];               // ids sélectionnés, dans l'ordre d'ajout
+    const slots = new Map();      // id -> couleur : une couleur suit son ETF tant qu'il reste sélectionné
+    const cours = new Map();      // id -> Map(date -> cours)
+    let depuis = null;
+    let presetActif = null;
+
+    const $ = (id) => document.getElementById(id);
+
+    function coursDe(id) {
+      if (!cours.has(id)) {
+        const s = d.series[id];
+        cours.set(id, new Map(s.dates.map((dt, i) => [dt, s.close[i]])));
+      }
+      return cours.get(id);
+    }
+
+    function ajouter(id) {
+      if (choix.includes(id) || choix.length >= MAX || !d.series[id]) return;
+      choix.push(id);
+      const pris = new Set(slots.values());
+      for (let i = 0; i < MAX; i++) if (!pris.has(i)) { slots.set(id, i); break; }
+    }
+
+    function retirer(id) {
+      choix = choix.filter((x) => x !== id);
+      slots.delete(id);
+    }
+
+    function groupe(a) {
+      return a.categories.find((c) => c !== "harry_browne") || a.categories[0];
+    }
+
+    function afficherChoix() {
+      const groupes = new Map(Object.keys(d.categories).map((c) => [c, []]));
+      App.actifsHorsParite(d).forEach((a) => groupes.get(groupe(a)).push(a));
+      $("choix").innerHTML = [...groupes]
+        .filter(([, l]) => l.length)
+        .map(([c, l]) => `<div class="chip-group"><h3>${App.echapper(d.categories[c])}</h3><div class="chips">
+          ${l.map((a) => `<button type="button" class="chip" data-id="${a.id}" aria-pressed="false">
+            <span class="swatch"></span>${App.echapper(a.nom)}</button>`).join("")}</div></div>`)
+        .join("");
+      $("choix").addEventListener("click", (e) => {
+        const b = e.target.closest(".chip");
+        if (!b) return;
+        choix.includes(b.dataset.id) ? retirer(b.dataset.id) : ajouter(b.dataset.id);
+        rendu();
+      });
+    }
+
+    function majChips() {
+      document.querySelectorAll(".chip").forEach((b) => {
+        const actif = choix.includes(b.dataset.id);
+        b.setAttribute("aria-pressed", actif);
+        b.disabled = !actif && choix.length >= MAX;
+        b.style.setProperty("--swatch", actif ? App.couleurSerie(slots.get(b.dataset.id)) : "transparent");
+      });
+    }
+
+    function datesCommunes() {
+      const autres = choix.slice(1).map(coursDe);
+      return d.series[choix[0]].dates.filter((dt) => autres.every((m) => m.has(dt)));
+    }
+
+    function majUrl() {
+      const p = new URLSearchParams();
+      if (presetActif) p.set("preset", presetActif);
+      p.set("ids", choix.join(","));
+      if (depuis) p.set("depuis", depuis);
+      history.replaceState(null, "", `${location.pathname}?${p}`);
+    }
+
+    function message(html) {
+      $("message").innerHTML = html ? `<p class="notice">${html}</p>` : "";
+      $("graphique").style.display = html ? "none" : "";
+      $("bloc-tableau").style.display = html ? "none" : "";
+    }
+
+    function rendu() {
+      majChips();
+      if (choix.length < 2) return message("Sélectionnez au moins 2 ETF.");
+      const communes = datesCommunes();
+      if (communes.length < 2) return message("Ces ETF n'ont pas de dates de cotation communes.");
+
+      const min = communes[0], max = communes.at(-2);
+      if (!depuis || depuis < min) depuis = min;
+      if (depuis > max) depuis = max;
+      const input = $("depuis");
+      Object.assign(input, { min, max, value: depuis });
+
+      const dates = communes.slice(communes.findIndex((dt) => dt >= depuis));
+      const base = dates[0];
+      const base100 = choix.map((id) => {
+        const m = coursDe(id), ref = m.get(base);
+        return dates.map((dt) => (m.get(dt) / ref) * 100);
+      });
+      const mix = dates.map((_, i) => base100.reduce((s, serie) => s + serie[i], 0) / base100.length);
+
+      message("");
+      const traces = choix.map((id, k) => ({
+        x: dates, y: base100[k], type: "scatter", mode: "lines", name: App.actif(d, id).nom,
+        line: { color: App.couleurSerie(slots.get(id)), width: 2 },
+        hovertemplate: "%{y:.1f}",
+      }));
+      traces.push({
+        x: dates, y: mix, type: "scatter", mode: "lines", name: "Mix équipondéré",
+        line: { color: App.css("--text-primary"), width: 2, dash: "dash" },
+        hovertemplate: "%{y:.1f}",
+      });
+      Plotly.react("graphique", traces, App.layout({
+        showlegend: true,
+        legend: { orientation: "h", x: 0, y: 1, yanchor: "bottom", font: { color: App.css("--text-secondary") } },
+        margin: { l: 44, r: 12, t: 40, b: 36 },
+        shapes: [{ type: "line", xref: "paper", x0: 0, x1: 1, y0: 100, y1: 100, line: { color: App.css("--axis"), width: 1 } }],
+      }), App.PLOTLY_CONFIG);
+
+      const jours = App.joursEntre(base, dates.at(-1));
+      const ligne = (nom, couleur, serie, style = "") => {
+        const v = serie.at(-1) / 100 - 1;
+        const an = App.annualiser(v, jours);
+        return `<tr><td><span class="name-cell"><span class="swatch" style="--swatch:${couleur};${style}"></span>${App.echapper(nom)}</span></td>
+          <td class="num ${App.sens(v)}">${App.pct(v)}</td><td class="num ${App.sens(an)}">${App.pct(an)}</td></tr>`;
+      };
+      $("titre-tableau").textContent = `Performances du ${App.date(base)} au ${App.date(dates.at(-1))} (${jours} jours)`;
+      $("tableau").innerHTML = `<table><thead><tr><th>ETF</th><th class="num">Variation</th><th class="num">Annualisée</th></tr></thead><tbody>
+        ${choix.map((id, k) => ligne(App.actif(d, id).nom, App.couleurSerie(slots.get(id)), base100[k])).join("")}
+        ${ligne("Mix équipondéré", "transparent", mix, `border:2px dashed ${App.css("--text-primary")}`)}
+        </tbody></table>`;
+      majUrl();
+    }
+
+    function initialiser(donnees) {
+      d = donnees;
+      const p = new URLSearchParams(location.search);
+      const preset = PRESETS[p.get("preset")] && p.get("preset");
+      let ids = (p.get("ids") || "").split(",").filter(Boolean);
+      if (preset) {
+        presetActif = preset;
+        if (!ids.length) ids = App.actifsHorsParite(d).filter((a) => a.categories.includes(preset)).map((a) => a.id);
+        $("titre").textContent = PRESETS[preset].titre;
+        $("intro").textContent = PRESETS[preset].intro;
+        document.title = `${PRESETS[preset].titre} – ETF Monitoring`;
+        $("nav-hb").setAttribute("aria-current", "page");
+      } else {
+        $("nav-comparateur").setAttribute("aria-current", "page");
+      }
+      (ids.length ? ids : PAR_DEFAUT).forEach(ajouter);
+      depuis = p.get("depuis");
+
+      afficherChoix();
+      $("depuis").addEventListener("change", (e) => { depuis = e.target.value || null; rendu(); });
+      $("raccourcis").addEventListener("click", (e) => {
+        const b = e.target.closest("button");
+        if (!b || choix.length < 2) return;
+        const plage = PLAGES[b.dataset.plage];
+        depuis = plage ? App.decaler(datesCommunes().at(-1), plage) : null;
+        rendu();
+      });
+      rendu();
+      App.surChangementTheme(rendu);
+      App.piedDePage(d);
+    }
+
+    App.charger().then(initialiser).catch((e) => App.erreur($("choix"), e));
+  </script>
+</body>
+</html>

@@ -27,6 +27,7 @@ class Config:
     date_debut_defaut: str
     parite: Actif
     actifs: tuple[Actif, ...]
+    categories: dict[str, str] = field(default_factory=dict)
 
     def table_id(self, actif: Actif) -> str:
         return f"{self.bq_project}.{self.bq_dataset}.{actif.table}"
@@ -78,7 +79,13 @@ def charger_config(path: Path = CONFIG_PATH) -> Config:
                 "passer des actifs dans l'autre fréquence"
             )
 
+    categories = data.get("categories", {})
+    inconnues = {c for a in (parite, *actifs) for c in a.categories} - categories.keys()
+    if inconnues:
+        raise ValueError(f"Catégories sans libellé dans [categories] : {sorted(inconnues)}")
+
     return Config(
+        categories=categories,
         bq_project=projet["bq_project"],
         bq_dataset=projet["bq_dataset"],
         date_debut_defaut=projet["date_debut_defaut"],

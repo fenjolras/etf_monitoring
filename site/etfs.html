@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tous les ETF – ETF Monitoring</title>
+  <meta name="description" content="Performances de tous les ETF suivis, par zone géographique et par thème : 1 semaine, 1 mois, 3 mois, 1 an, 3 ans.">
+  <link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="wrap">
+      <a class="brand" href="index.html">ETF Monitoring</a>
+      <nav class="nav" aria-label="Navigation principale">
+        <a href="index.html">Accueil</a>
+        <a href="comparateur.html">Comparateur</a>
+        <a href="comparateur.html?preset=harry_browne">Harry Browne</a>
+        <a href="etfs.html" aria-current="page">Tous les ETF</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <h1>Tous les ETF</h1>
+    <p class="lead">Performances en euros, classées par zone et par thème. Cliquez sur un ETF pour voir son historique.</p>
+    <div id="listes"><p class="muted">Chargement…</p></div>
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrap">
+      <p id="maj"></p>
+      <p>Les performances passées ne préjugent pas des performances futures. Ce site est informatif et ne constitue pas un conseil en investissement.</p>
+    </div>
+  </footer>
+
+  <script src="assets/app.js"></script>
+  <script>
+    const COLONNES = ["1 sem.", "1 mois", "3 mois", "1 an", "3 ans"];
+    const periodes = COLONNES.map((l) => App.PERIODES.find(([x]) => x === l)[1]);
+
+    function tableau(d, actifs) {
+      const lignes = actifs.map((a) => {
+        const s = d.series[a.id];
+        const cellules = periodes.map((p) => {
+          const v = App.variation(s, p);
+          return `<td class="num ${App.sens(v)}">${App.pct(v)}</td>`;
+        }).join("");
+        return `<tr>
+          <td><a href="etf.html?id=${a.id}">${App.echapper(a.nom)}</a></td>
+          <td class="num">${App.prix(a, s.close.at(-1))}</td>${cellules}</tr>`;
+      }).join("");
+      return `<div class="table-wrap"><table>
+        <thead><tr><th>ETF</th><th class="num">Dernier cours</th>${COLONNES.map((c) => `<th class="num">${c}</th>`).join("")}</tr></thead>
+        <tbody>${lignes}</tbody></table></div>`;
+    }
+
+    App.charger()
+      .then((d) => {
+        document.getElementById("listes").innerHTML = Object.entries(d.categories)
+          .map(([cle, libelle]) => [libelle, d.actifs.filter((a) => a.categories.includes(cle))])
+          .filter(([, actifs]) => actifs.length)
+          .map(([libelle, actifs]) => `<section class="card"><h2>${App.echapper(libelle)}</h2>${tableau(d, actifs)}</section>`)
+          .join("");
+        App.piedDePage(d);
+      })
+      .catch((e) => App.erreur(document.getElementById("listes"), e));
+  </script>
+</body>
+</html>

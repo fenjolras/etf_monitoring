@@ -32,3 +32,9 @@ imports/.env
 .env.*
 .secrets/
 *service-account*.json
+
+# Site généré (scripts/build_site.py)
+public/
+
+# Configuration locale de Claude Code
+.claude/

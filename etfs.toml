@@ -20,12 +20,25 @@ date_debut_defaut = "2000-01-01"
 # (daily, weekly) doit rester sous ce plafond : le chargement échoue sinon.
 quota_appels_jour = 20
 
+# Libellés des catégories, dans l'ordre d'affichage sur le site.
+[categories]
+harry_browne = "Portefeuille Harry Browne"
+world = "Monde"
+us = "États-Unis"
+europe = "Europe"
+asie = "Asie"
+secteurs = "Secteurs et thématiques"
+obligations = "Obligations"
+hard_assets = "Actifs réels"
+devises = "Devises"
+
 # Parité utilisée pour convertir les actifs cotés en USD.
 [parite]
 id = "EURUSD"
 ticker = "EURUSD.FOREX"
 table = "eur_usd_parity"
 nom = "Parité EUR/USD"
+categories = ["devises"]
 frequence = "daily"
 
 # --- Portefeuille Harry Browne -------------------------------------------
